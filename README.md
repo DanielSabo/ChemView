@@ -4,11 +4,14 @@ ChemView is a intuitive molecular modeling and computational chemistry program t
 
 ## Requirements
 **Linux:**
+
 * Qt 5.15
 * NWChem 7.0.2
 * OpenBabel 3.1.1
+* rsync (build only)
 
 **MacOS:**
+
 * Qt 6.2
 * NWChem 7.0.2 (build only)
 * OpenBabel 3.1.1 (build only)
