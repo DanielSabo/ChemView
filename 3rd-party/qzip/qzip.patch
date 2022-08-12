@@ -1,0 +1,96 @@
+diff -u qzip_orig/qzip.cpp qzip/qzip.cpp
+--- qzip_orig/qzip.cpp	2022-06-30 18:33:38.000000000 -0700
++++ qzip/qzip.cpp	2022-06-30 18:31:42.000000000 -0700
+@@ -41,8 +41,8 @@
+ 
+ #ifndef QT_NO_TEXTODFWRITER
+ 
+-#include "qzipreader_p.h"
+-#include "qzipwriter_p.h"
++#include "qzipreader.h"
++#include "qzipwriter.h"
+ #include <qdatetime.h>
+ #include <qendian.h>
+ #include <qdebug.h>
+@@ -60,8 +60,6 @@
+ #define ZDEBUG if (0) qDebug
+ #endif
+ 
+-QT_BEGIN_NAMESPACE
+-
+ static inline uint readUInt(const uchar *data)
+ {
+     return (data[0]) + (data[1]<<8) + (data[2]<<16) + (data[3]<<24);
+@@ -1361,6 +1359,4 @@
+     d->device->close();
+ }
+ 
+-QT_END_NAMESPACE
+-
+ #endif // QT_NO_TEXTODFWRITER
+diff -u qzip_orig/qzipreader.h qzip/qzipreader.h
+--- qzip_orig/qzipreader.h	2022-06-30 18:33:38.000000000 -0700
++++ qzip/qzipreader.h	2022-06-30 18:31:52.000000000 -0700
+@@ -40,7 +40,6 @@
+ #ifndef QZIPREADER_H
+ #define QZIPREADER_H
+ 
+-#include <QtGui/private/qtguiglobal_p.h>
+ #include <QtCore/qglobal.h>
+ 
+ #ifndef QT_NO_TEXTODFWRITER
+@@ -60,11 +59,9 @@
+ #include <QtCore/qfile.h>
+ #include <QtCore/qstring.h>
+ 
+-QT_BEGIN_NAMESPACE
+-
+ class QZipReaderPrivate;
+ 
+-class Q_GUI_EXPORT QZipReader
++class QZipReader
+ {
+ public:
+     explicit QZipReader(const QString &fileName, QIODevice::OpenMode mode = QIODevice::ReadOnly );
+@@ -121,7 +118,5 @@
+ Q_DECLARE_TYPEINFO(QZipReader::FileInfo, Q_MOVABLE_TYPE);
+ Q_DECLARE_TYPEINFO(QZipReader::Status, Q_PRIMITIVE_TYPE);
+ 
+-QT_END_NAMESPACE
+-
+ #endif // QT_NO_TEXTODFWRITER
+ #endif // QZIPREADER_H
+diff -u qzip_orig/qzipwriter.h qzip/qzipwriter.h
+--- qzip_orig/qzipwriter.h	2022-06-30 18:33:38.000000000 -0700
++++ qzip/qzipwriter.h	2022-06-30 18:31:46.000000000 -0700
+@@ -39,8 +39,6 @@
+ #ifndef QZIPWRITER_H
+ #define QZIPWRITER_H
+ 
+-#include <QtGui/private/qtguiglobal_p.h>
+-
+ #ifndef QT_NO_TEXTODFWRITER
+ 
+ //
+@@ -57,12 +55,9 @@
+ #include <QtCore/qstring.h>
+ #include <QtCore/qfile.h>
+ 
+-QT_BEGIN_NAMESPACE
+-
+ class QZipWriterPrivate;
+ 
+-
+-class Q_GUI_EXPORT QZipWriter
++class QZipWriter
+ {
+ public:
+     explicit QZipWriter(const QString &fileName, QIODevice::OpenMode mode = (QIODevice::WriteOnly | QIODevice::Truncate) );
+@@ -111,7 +106,5 @@
+     Q_DISABLE_COPY_MOVE(QZipWriter)
+ };
+ 
+-QT_END_NAMESPACE
+-
+ #endif // QT_NO_TEXTODFWRITER
+ #endif // QZIPWRITER_H

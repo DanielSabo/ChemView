@@ -1,0 +1,42 @@
+<RCC>
+    <qresource prefix="/">
+        <file>structure/32_bent.mol</file>
+        <file>structure/33_trigonal_planar.mol</file>
+        <file>structure/41_single.mol</file>
+        <file>structure/42_bent.mol</file>
+        <file>structure/43_trigonal_pyramidal.mol</file>
+        <file>structure/44_tetrahedral.mol</file>
+        <file>structure/52_linear.mol</file>
+        <file>structure/53_T_shaped_(axial).mol</file>
+        <file>structure/53_T_shaped_(radial).mol</file>
+        <file>structure/54_seesaw_(axial).mol</file>
+        <file>structure/54_seesaw_(radial).mol</file>
+        <file>structure/55_trigonal_bipyramidal_(axial).mol</file>
+        <file>structure/55_trigonal_bipyramidal_(radial).mol</file>
+        <file>structure/64_square_planar.mol</file>
+        <file>structure/65_square_pyramidal_(axial).mol</file>
+        <file>structure/65_square_pyramidal_(radial).mol</file>
+        <file>structure/66_octahedral.mol</file>
+        <file>structure/32_bent.png</file>
+        <file>structure/33_trigonal_planar.png</file>
+        <file>structure/41_single.png</file>
+        <file>structure/42_bent.png</file>
+        <file>structure/43_trigonal_pyramidal.png</file>
+        <file>structure/44_tetrahedral.png</file>
+        <file>structure/52_linear.png</file>
+        <file>structure/53_T_shaped_(axial).png</file>
+        <file>structure/53_T_shaped_(radial).png</file>
+        <file>structure/54_seesaw_(axial).png</file>
+        <file>structure/54_seesaw_(radial).png</file>
+        <file>structure/55_trigonal_bipyramidal_(axial).png</file>
+        <file>structure/55_trigonal_bipyramidal_(radial).png</file>
+        <file>structure/64_square_planar.png</file>
+        <file>structure/65_square_pyramidal_(axial).png</file>
+        <file>structure/65_square_pyramidal_(radial).png</file>
+        <file>structure/66_octahedral.png</file>
+        <file>shaders/gl3/selection_hightlight.vert</file>
+        <file>shaders/gl3/selection_hightlight.frag</file>
+        <file>shaders/gl3/bond_hightlight.frag</file>
+        <file>shaders/gl3/bond_hightlight.vert</file>
+    </qresource>
+</RCC>
