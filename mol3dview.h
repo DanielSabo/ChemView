@@ -56,13 +56,8 @@ public:
     void modifySelectionElement(int atomicNumber);
     void setAddRGroup(MolStruct m);
 
-    void addUndoEvent();
-    void undo();
-    void redo();
-    void clearUndoRedo();
-    QPair<bool, bool> getUndoRedoState();
-
 signals:
+    void addUndoEvent();
     void moleculeChanged();
     void selectionChanged(QList<int>);
     void hoverInfo(QString info);

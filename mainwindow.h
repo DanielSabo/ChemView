@@ -30,6 +30,7 @@ public slots:
     void actionQuit();
     void actionNew();
     void actionOpenFile();
+    void actionClose();
     void actionSave();
     void actionSaveAs();
 
@@ -64,6 +65,7 @@ private:
     void connectActions();
 
     bool doSave(QString filename);
-    bool promptSave();
+    bool promptSaveCurrentTab();
+    bool promptSaveAll();
 };
 #endif // MAINWINDOW_H

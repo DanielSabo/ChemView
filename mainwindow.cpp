@@ -34,6 +34,30 @@
 #include <QDesktopServices>
 #include <QActionGroup>
 
+struct MolDocState {
+    MolDocument document;
+
+    std::shared_ptr<Optimizer> calculation;
+
+    QString activeSurface;
+    float activeSurfaceThreshold = 0.01;
+};
+
+struct TabState {
+    TabState() = default;
+    TabState(const TabState&) = delete;
+    TabState& operator= (const TabState&) = delete;
+
+    MolDocState current;
+    QList<MolDocState> undoStack;
+    QList<MolDocState> redoStack;
+
+    int activeAnimation = -1;
+
+    QString filePath;
+    bool modified = false;
+};
+
 class MainWindowPrivate
 {
 public:
@@ -52,20 +76,34 @@ public:
 
     NWChemConfiguration currentNWChemConfig;
 
-    std::unique_ptr<Optimizer> optimizer;
-    std::unique_ptr<OptimizerProgressDialog> optimizerDialog;
-    bool optimizerChangedGeometry;
+    std::vector<std::unique_ptr<TabState>> tabStates;
+    int activeTab = 0;
 
-    std::unique_ptr<Optimizer> savedOptimizer;
-    int activeAnimation;
-    QString activeSurface;
-    float activeSurfaceThreshold;
-    MolDocument currentDocument;
+//    std::unique_ptr<Optimizer> optimizer;
+    std::unique_ptr<OptimizerProgressDialog> optimizerDialog;
+    bool calculationChangedGeometry;
+
+    bool inShowMolecule = false;
+
+//    MolDocState current;
+//    QList<MolDocState> undoStack;
+//    QList<MolDocState> redoStack;
 
     void replaceToolWidget(QWidget *w);
     void updatePropertiesWindow(bool ifHidden = false);
+    void showCurrentMolecule();
     void moleculeChanged();
-    void runOptimizer(std::unique_ptr<Optimizer> optimizer , QString title, bool saveOptimizer);
+    void runCalculation(std::shared_ptr<Optimizer> optimizer , QString title, bool saveOptimizer, bool generateUndoStep);
+
+    int newTab(std::unique_ptr<TabState> ts, bool activate);
+    void activateTab(int index);
+    void closeTab(int index);
+    TabState *activeTabState();
+
+    void addUndoEvent();
+    void undo();
+    void redo();
+    void clearUndoRedo();
 };
 
 void MainWindowPrivate::replaceToolWidget(QWidget *w)
@@ -80,27 +118,51 @@ void MainWindowPrivate::updatePropertiesWindow(bool ifHidden)
 {
     if (propertiesWindow->isVisible() || ifHidden)
     {
-        bool optimizerAvailable = (qobject_cast<OptimizerNWChem *>(savedOptimizer.get()) ||
-                                   qobject_cast<OptimizerNWChem *>(optimizer.get()));
-        propertiesWindow->showData(currentDocument, optimizerAvailable);
+        auto ts = activeTabState(); //FIXME: Check empty?
+        bool optimizerAvailable = qobject_cast<OptimizerNWChem *>(ts->current.calculation.get());
+        propertiesWindow->showData(ts->current.document, optimizerAvailable);
     }
+}
+
+void MainWindowPrivate::showCurrentMolecule()
+{
+    auto ts = activeTabState();
+
+    //TODO: Should this also show the volume?
+    inShowMolecule = true;
+    mol3dView->showMolStruct(ts->current.document.molecule);
+
+//    qDebug() << "Show surface:" << current.activeSurface;
+
+    if (!ts->current.activeSurface.isEmpty() && ts->current.document.volumes.contains(ts->current.activeSurface))
+        mol3dView->showVolumeData(ts->current.document.volumes.value(ts->current.activeSurface), ts->current.activeSurfaceThreshold);
+    inShowMolecule = false;
 }
 
 void MainWindowPrivate::moleculeChanged()
 {
     Q_Q(MainWindow);
-    savedOptimizer.reset();
-    currentDocument = MolDocument(mol3dView->getMolStruct());
-    activeAnimation = -1;
-    q->setWindowModified(true);
+
+    auto ts = activeTabState();
+
+    if (!inShowMolecule)
+    {
+        ts->current.calculation.reset();
+        ts->current.document = MolDocument(mol3dView->getMolStruct());
+        ts->current.activeSurface = QString();
+        ts->modified = true;
+    }
+
+    ts->activeAnimation = -1;
+    q->setWindowModified(ts->modified);
     updatePropertiesWindow();
     q->syncMenuStates();
 
     QString rightBarMessage;
-    if (!currentDocument.molecule.isEmpty())
+    if (!ts->current.document.molecule.isEmpty())
     {
-        int charge = calc_util::overallCharge(currentDocument.molecule);
-        int spin = calc_util::overallSpin(currentDocument.molecule);
+        int charge = calc_util::overallCharge(ts->current.document.molecule);
+        int spin = calc_util::overallSpin(ts->current.document.molecule);
 
         if (charge > 0)
             rightBarMessage = QStringLiteral("Charge: %1+").arg(charge);
@@ -121,34 +183,41 @@ void MainWindowPrivate::moleculeChanged()
     statusBarRight->setText(rightBarMessage);
 }
 
-void MainWindowPrivate::runOptimizer(std::unique_ptr<Optimizer> opt, QString title, bool saveOptimizer)
+void MainWindowPrivate::runCalculation(std::shared_ptr<Optimizer> opt, QString title, bool saveOptimizer, bool generateUndoStep)
 {
     Q_Q(MainWindow);
-    optimizer = std::move(opt);
-    optimizerChangedGeometry = false;
+
+    Optimizer *optimizer = opt.get();
+    calculationChangedGeometry = false;
 
     optimizerDialog.reset(new OptimizerProgressDialog());
     optimizerDialog->setWindowModality(Qt::ApplicationModal);
     optimizerDialog->setText(title);
 
-    q->connect(optimizerDialog.get(), &QDialog::finished, q, [this](int){
+    q->connect(optimizerDialog.get(), &QDialog::finished, q, [this, optimizer](int){
         // Result is ignored because the dialog will only close if rejected
         optimizer->kill();
 
         optimizerDialog.reset();
-        optimizer.reset();
+
+        auto ts = activeTabState();
+        ts->current.calculation.reset();
     });
 
-    q->connect(optimizer.get(), &Optimizer::statusMessage, q, [this](QString msg){
+    q->connect(optimizer, &Optimizer::statusMessage, q, [this](QString msg){
         optimizerDialog->setText(msg);
     });
 
-    q->connect(optimizer.get(), &Optimizer::geometryUpdate, q, [this](){
-        mol3dView->showMolStruct(optimizer->getStructure());
-        optimizerChangedGeometry = true;
+    q->connect(optimizer, &Optimizer::geometryUpdate, q, [this, optimizer](){
+        auto ts = activeTabState();
+        ts->current.document = MolDocument(optimizer->getStructure());
+        showCurrentMolecule();
+        calculationChangedGeometry = true;
     });
 
-    q->connect(optimizer.get(), &Optimizer::finished, q, [this, saveOptimizer, q](){
+    q->connect(optimizer, &Optimizer::finished, q, [this, optimizer, saveOptimizer, generateUndoStep, q](){
+        auto ts = activeTabState();
+
         optimizerDialog.reset();
         auto error = optimizer->getError();
         if (!error.isEmpty())
@@ -158,51 +227,47 @@ void MainWindowPrivate::runOptimizer(std::unique_ptr<Optimizer> opt, QString tit
 
             OptimizerErrorDialog errorDialog;
             errorDialog.setText(error);
-            errorDialog.setHasGeometry(optimizerChangedGeometry);
+            errorDialog.setHasGeometry(calculationChangedGeometry && generateUndoStep);
             errorDialog.setOutputURL(optimizer->getLogFile());
             if (!errorDialog.exec())
             {
-                mol3dView->undo(); // Reset the geometry
+                undo(); // Reset the geometry
             }
         }
         else
         {
-            MolDocument result = optimizer->getResults();
-            mol3dView->showMolStruct(result.molecule);
-            if (result.volumes.contains(activeSurface))
-            {
-                mol3dView->showVolumeData(result.volumes.value(activeSurface), activeSurfaceThreshold);
-            }
-            currentDocument = result;
+            ts->current.document = optimizer->getResults();
+            showCurrentMolecule();
             q->setWindowModified(true);
             updatePropertiesWindow();
         }
 
         optimizer->kill();
+        QObject::disconnect(optimizer, 0, 0, 0);
 
-        if (saveOptimizer && error.isEmpty())
-        {
-            savedOptimizer = std::move(optimizer);
-            QObject::disconnect(savedOptimizer.get(), 0, 0, 0);
-        }
-        else
-        {
-            optimizer.release()->deleteLater();
-        }
+        if (!saveOptimizer || !error.isEmpty())
+            ts->current.calculation.reset();
 
         q->syncMenuStates();
-    });
+    }, Qt::QueuedConnection); // Use QueuedConnection so we can delete the optimizer within the signal handler
 
-    mol3dView->addUndoEvent();
+    if (generateUndoStep)
+        addUndoEvent();
+
+    auto ts = activeTabState();
+    ts->current.calculation = opt;
 
     if (!optimizer->run())
     {
         optimizerDialog.reset();
         auto error = optimizer->getError();
-        optimizer->kill();
-        optimizer.release()->deleteLater();
 
-        mol3dView->undo();
+        optimizer->kill();
+        QObject::disconnect(optimizer, 0, 0, 0);
+        ts->current.calculation.reset();
+
+        if (generateUndoStep)
+            undo();
 
         qDebug() << "Optimize failed:";
         qDebug() << qPrintable(error);
@@ -214,6 +279,151 @@ void MainWindowPrivate::runOptimizer(std::unique_ptr<Optimizer> opt, QString tit
 
     if (optimizerDialog)
         optimizerDialog->exec();
+}
+
+int MainWindowPrivate::newTab(std::unique_ptr<TabState> ts, bool activate)
+{
+    Q_Q(MainWindow);
+    QString tabName = "Untitled";
+    if (!ts->filePath.isEmpty())
+        tabName = QFileInfo(ts->filePath).fileName();
+    tabStates.push_back(std::move(ts));
+
+    q->ui->tabBar->addTab(tabName);
+    q->ui->tabBar->setHidden(tabStates.size() <= 1);
+
+    int idx = tabStates.size() - 1;
+    if (activate)
+        q->ui->tabBar->setCurrentIndex(idx);
+
+    return idx;
+}
+
+void MainWindowPrivate::activateTab(int index)
+{
+    Q_Q(MainWindow);
+
+    if (index < 0 || index >= (int)tabStates.size())
+    {
+        qWarning() << "activateTab: Invalid tab index:" << index;
+        return;
+    }
+
+    //FIXME: Or should we remember the active animation?
+    if (activeTab >= 0 && activeTab < (int)tabStates.size())
+        tabStates.at(activeTab)->activeAnimation = -1;
+
+    activeTab = index;
+    auto &ts = tabStates.at(activeTab);
+
+    QString tabName = "Untitled";
+    if (!ts->filePath.isEmpty())
+        tabName = QFileInfo(ts->filePath).fileName();
+
+    q->setWindowTitle(tabName + "[*]");;
+    q->setWindowFilePath(ts->filePath);
+    q->setWindowModified(ts->modified);
+    q->ui->tabBar->setTabText(index, tabName);
+
+    showCurrentMolecule();
+}
+
+void MainWindowPrivate::closeTab(int index)
+{
+    Q_Q(MainWindow);
+
+    if (index < 0 || index >= (int)tabStates.size())
+    {
+        qWarning() << "deleteTab: Invalid tab index:" << index;
+        return;
+    }
+
+    int lastTab = activeTab;
+
+    // If the tab was modified prompt to save it
+    if (tabStates.at(index)->modified)
+    {
+        q->ui->tabBar->setCurrentIndex(index);
+        if (!q->promptSaveCurrentTab())
+        {
+            q->ui->tabBar->setCurrentIndex(lastTab);
+            return;
+        }
+    }
+
+    if (lastTab >= index)
+        lastTab--;
+    tabStates.erase(tabStates.begin() + index);
+    q->ui->tabBar->removeTab(index);
+    if (tabStates.empty())
+        q->actionNew();
+    else
+        q->ui->tabBar->setCurrentIndex(lastTab);
+
+    q->ui->tabBar->setHidden(tabStates.size() <= 1);
+}
+
+TabState *MainWindowPrivate::activeTabState()
+{
+    if (activeTab < 0 || activeTab >= (int)tabStates.size())
+    {
+        qCritical() << "activeTabState(): there are no tabs!";
+        return nullptr;
+    }
+
+    return tabStates.at(activeTab).get();
+}
+
+void MainWindowPrivate::addUndoEvent()
+{
+    auto ts = activeTabState();
+
+    ts->undoStack.push_back(ts->current);
+    ts->redoStack.clear();
+}
+
+void MainWindowPrivate::undo()
+{
+    Q_Q(MainWindow);
+
+    auto ts = activeTabState();
+
+    if (ts->undoStack.isEmpty())
+        return;
+
+    ts->redoStack.push_back(ts->current);
+    ts->current = ts->undoStack.takeLast();
+    showCurrentMolecule();
+
+    //TODO: Merge this logic with moleculeChanged()
+    updatePropertiesWindow();
+    q->syncMenuStates();
+}
+
+void MainWindowPrivate::redo()
+{
+    Q_Q(MainWindow);
+
+    auto ts = activeTabState();
+
+    if (ts->redoStack.isEmpty())
+        return;
+
+    ts->undoStack.push_back(ts->current);
+    ts->current = ts->redoStack.takeLast();
+    showCurrentMolecule();
+
+    //TODO: Merge this logic with moleculeChanged()
+    updatePropertiesWindow();
+    q->syncMenuStates();
+}
+
+void MainWindowPrivate::clearUndoRedo()
+{
+    auto ts = activeTabState();
+
+    ts->undoStack.clear();
+    ts->redoStack.clear();
 }
 
 
@@ -248,7 +458,6 @@ MainWindow::MainWindow(QWidget *parent)
         d->currentNWChemConfig.taskFreq = true;
     }
 
-
 #if defined(Q_OS_MAC)
     {
         ui->line->setHidden(true);
@@ -276,38 +485,52 @@ MainWindow::MainWindow(QWidget *parent)
     d->drawStyleActionGroup->addAction(ui->actionStyle_Stick);
 
     // Set up 3d view
-    d->mol3dView = new Mol3dView;
-    d->mol3dView->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding);
-    ui->centralLayout->addWidget(d->mol3dView);
+    d->mol3dView = ui->mol3dview;
+    ui->mol3dview->getViewWindow()->installEventFilter(this);
 
-    d->mol3dView->getViewWindow()->installEventFilter(this);
-
-    connect(d->mol3dView, &Mol3dView::hoverInfo, this,
+    connect(ui->mol3dview, &Mol3dView::hoverInfo, this,
             [this](QString info) {
                 ui->statusbar->showMessage(info);
             });
 
-    connect(d->mol3dView, &Mol3dView::moleculeChanged, this,
+    connect(ui->mol3dview, &Mol3dView::moleculeChanged, this,
             [d]() {
                 d->moleculeChanged();
             });
 
+    connect(ui->mol3dview, &Mol3dView::addUndoEvent, this,
+            [d]() {
+                d->addUndoEvent();
+            });
+
+    connect(ui->tabBar, &QTabBar::currentChanged, this,
+            [d](int idx) {
+                d->activateTab(idx);
+            });
+
+    connect(ui->tabBar, &QTabBar::tabCloseRequested, this,
+            [d](int idx) {
+                d->closeTab(idx);
+            });
+
     setAcceptDrops(true);
-
-    syncMenuStates();
-
-    // Sync 3d view state to the active tool
-    MainWindow::toolButtonClicked(d->toolbarButtonGroup->checkedButton());
 
     //FIXME: With MacOS + Qt6 focusing the view here prevents the menus from initializing
     //       until it loses focus somehow.
 //    d->mol3dView->setFocus();
 
-    setWindowTitle("Untitled[*]");
-    setWindowModified(false);
-    setWindowFilePath({});
+//    ui->tabBar->setShape(QTabBar::RoundedNorth);
+//    ui->tabBar->setDocumentMode(true);
+    ui->tabBar->setTabsClosable(true);
+    ui->tabBar->setHidden(true);
 
     d->propertiesWindow = new PropertiesWindow(this);
+
+    actionNew();
+
+    // Sync 3d view state to the active tool
+    MainWindow::toolButtonClicked(d->toolbarButtonGroup->checkedButton());
+    syncMenuStates();
 }
 
 MainWindow::~MainWindow()
@@ -320,6 +543,7 @@ void MainWindow::connectActions()
     // File
     connect(ui->actionNew, &QAction::triggered, this, &MainWindow::actionNew);
     connect(ui->actionOpen, &QAction::triggered, this, &MainWindow::actionOpenFile);
+    connect(ui->actionClose, &QAction::triggered, this, &MainWindow::actionClose);
     connect(ui->actionSave, &QAction::triggered, this, &MainWindow::actionSave);
     connect(ui->actionSave_As, &QAction::triggered, this, &MainWindow::actionSaveAs);
     connect(ui->actionQuit, &QAction::triggered, this, &MainWindow::actionQuit);
@@ -375,16 +599,18 @@ bool MainWindow::doSave(QString filename)
 
     QSaveFile file(filename);
 
+    auto ts = d->activeTabState();
+
     try
     {
         if(!file.open(QIODevice::WriteOnly))
             throw file.errorString();
         if (filename.endsWith(".cvproj"))
         {
-            if (OptimizerNWChem *nwchemOpt = qobject_cast<OptimizerNWChem *>(d->savedOptimizer.get()))
-                CVProjFile::write(&file, d->currentDocument, *nwchemOpt);
+            if (OptimizerNWChem *nwchemOpt = qobject_cast<OptimizerNWChem *>(ts->current.calculation.get()))
+                CVProjFile::write(&file, ts->current.document, *nwchemOpt);
             else
-                CVProjFile::write(&file, d->currentDocument);
+                CVProjFile::write(&file, ts->current.document);
         }
         else
         {
@@ -422,19 +648,21 @@ bool MainWindow::doSave(QString filename)
         return false;
     }
 
-    setWindowTitle(QFileInfo(filename).fileName() + "[*]");
-    setWindowModified(false);
-    setWindowFilePath(filename);
+    ts->modified = false;
+    ts->filePath = filename;
+    d->activateTab(d->activeTab);
 
     return true;
 }
 
-/* Prompt the user to save before continuing, return true if
+/* Prompt the user to save the current tab before continuing, return true if
  * the operation should continue (they saved or discarded).
  */
-bool MainWindow::promptSave()
+bool MainWindow::promptSaveCurrentTab()
 {
-    if (isWindowModified())
+    Q_D(MainWindow);
+
+    if (d->activeTabState()->modified)
     {
         QMessageBox savePrompt(this);
         savePrompt.setIcon(QMessageBox::Warning);
@@ -464,6 +692,26 @@ bool MainWindow::promptSave()
     return true;
 }
 
+/* Prompt the user to save for all tabs before continuing, return true if
+ * the operation should continue (they saved or discarded).
+ */
+bool MainWindow::promptSaveAll()
+{
+    Q_D(MainWindow);
+
+    for (int i = 0; i < (int)d->tabStates.size(); ++i)
+    {
+        if (d->tabStates[i]->modified)
+        {
+            ui->tabBar->setCurrentIndex(i);
+            if (!promptSaveCurrentTab())
+                return false;
+        }
+    }
+
+    return true;
+}
+
 void MainWindow::actionQuit()
 {
     close();
@@ -473,15 +721,7 @@ void MainWindow::actionNew()
 {
     Q_D(MainWindow);
 
-    if (!promptSave())
-        return;
-
-    d->mol3dView->clearUndoRedo();
-    d->mol3dView->showMolStruct({});
-
-    setWindowTitle("Untitled[*]");
-    setWindowModified(false);
-    setWindowFilePath({});
+    d->newTab(std::make_unique<TabState>(), true);
 }
 
 void MainWindow::actionOpenFile()
@@ -493,6 +733,13 @@ void MainWindow::actionOpenFile()
         QSettings().setValue("MainWindow/openSavePath", QFileInfo(filename).absoluteDir().absolutePath());
         openFile(filename);
     }
+}
+
+void MainWindow::actionClose()
+{
+    Q_D(MainWindow);
+
+    d->closeTab(d->activeTab);
 }
 
 void MainWindow::actionSave()
@@ -508,13 +755,13 @@ void MainWindow::actionSaveAs()
 void MainWindow::actionUndo()
 {
     Q_D(MainWindow);
-    d->mol3dView->undo();
+    d->undo();
 }
 
 void MainWindow::actionRedo()
 {
     Q_D(MainWindow);
-    d->mol3dView->redo();
+    d->redo();
 }
 
 void MainWindow::actionStyleBallandStick()
@@ -562,7 +809,7 @@ void MainWindow::actionNWChemOptimize()
     optimizer->setConfiguration(conf);
     qDebug() << "NWChem Config:" << conf.generateConfig();
 
-    d->runOptimizer(std::move(optimizer), QStringLiteral("Initializing NWChem Calculation..."), true);
+    d->runCalculation(std::move(optimizer), QStringLiteral("Initializing NWChem Calculation..."), true, true);
 }
 
 void MainWindow::actionNWChemSurfaceSpinTotal()
@@ -579,10 +826,14 @@ void MainWindow::actionNWChemOpenLogFile()
 {
     Q_D(MainWindow);
 
-    if (qobject_cast<OptimizerNWChem *>(d->savedOptimizer.get()) == nullptr)
-        return;
+    auto ts = d->activeTabState();
+    QUrl path = QUrl::fromLocalFile(ts->current.calculation->getLogFile());
 
-    QUrl path = QUrl::fromLocalFile(d->savedOptimizer->getLogFile());
+    if (path.isEmpty())
+    {
+        qDebug() << "OpenLogFile: Log path is emtpy";
+        return;
+    }
 
     if (!QDesktopServices::openUrl(path))
         qDebug() << "Faild to open log file:" << path;
@@ -630,29 +881,27 @@ void MainWindow::cleanUpButtonClicked()
 
     std::unique_ptr<OptimizerBabelFF> optimizer(new OptimizerBabelFF(this));
     optimizer->setStructure(d->mol3dView->getMolStruct());
-    d->runOptimizer(std::move(optimizer), "OpenBabel Force Field Optmization", false);
+    d->runCalculation(std::move(optimizer), "OpenBabel Force Field Optmization", false, true);
 }
 
 void MainWindow::generateNWChemSurface(QString name, float threshold)
 {
     Q_D(MainWindow);
 
-    if (qobject_cast<OptimizerNWChem *>(d->savedOptimizer.get()) == nullptr)
-        return;
+    auto ts = d->activeTabState();
 
-    d->activeSurface = name;
-    d->activeSurfaceThreshold = threshold;
+    ts->current.activeSurface = name;
+    ts->current.activeSurfaceThreshold = threshold;
 
-    if (d->currentDocument.volumes.contains(name))
+    if (ts->current.document.volumes.contains(name))
     {
         animateFrequency(-1);
-        d->mol3dView->showVolumeData(d->currentDocument.volumes.value(d->activeSurface), d->activeSurfaceThreshold);
+        d->mol3dView->showVolumeData(ts->current.document.volumes.value(ts->current.activeSurface), ts->current.activeSurfaceThreshold);
     }
-    else
+    else if (OptimizerNWChem *savedOpt = qobject_cast<OptimizerNWChem *>(ts->current.calculation.get()))
     {
-        std::unique_ptr<OptimizerNWChem> optimizer(qobject_cast<OptimizerNWChem *>(d->savedOptimizer.release()));
-        optimizer->requestSurface(d->activeSurface);
-        d->runOptimizer(std::move(optimizer), "Generating NWChem surfaces...", true);
+        savedOpt->requestSurface(ts->current.activeSurface);
+        d->runCalculation(ts->current.calculation, "Generating NWChem surfaces...", true, false);
     }
 }
 
@@ -660,23 +909,25 @@ void MainWindow::animateFrequency(int index)
 {
     Q_D(MainWindow);
 
-    if (d->activeAnimation == index)
+    auto ts = d->activeTabState();
+
+    if (ts->activeAnimation == index)
     {
         d->mol3dView->showAnimation({}, 0.2f);
-        d->activeAnimation = -1;
+        ts->activeAnimation = -1;
         return;
     }
 
-    if (index >= 0 && index < d->currentDocument.frequencies.size())
+    if (index >= 0 && index < ts->current.document.frequencies.size())
     {
         d->mol3dView->showVolumeData({}, 0.0f);
-        d->mol3dView->showAnimation(d->currentDocument.frequencies[index].eigenvector, 0.2f);
-        d->activeAnimation = index;
+        d->mol3dView->showAnimation(ts->current.document.frequencies[index].eigenvector, 0.2f);
+        ts->activeAnimation = index;
     }
     else
     {
         d->mol3dView->showAnimation({}, 0.2f);
-        d->activeAnimation = -1;
+        ts->activeAnimation = -1;
     }
 }
 
@@ -713,14 +964,15 @@ void MainWindow::dropEvent(QDropEvent *event)
 
     if (checkDragUrls(urls))
     {
-        openFile(urls.at(0).toLocalFile());
+        for (auto const &url: urls)
+            openFile(url.toLocalFile());
         event->acceptProposedAction();
     }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    if (!promptSave())
+    if (!promptSaveAll())
     {
         event->ignore();
         return;
@@ -758,12 +1010,14 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 void MainWindow::syncMenuStates()
 {
     Q_D(MainWindow);
-    bool haveSavedOptimizer = qobject_cast<OptimizerNWChem *>(d->savedOptimizer.get());
+    auto ts = d->activeTabState();
+
+    bool haveSavedOptimizer = qobject_cast<OptimizerNWChem *>(ts->current.calculation.get());
     ui->actionNWChemSurfaceSpinTotal->setEnabled(haveSavedOptimizer);
     ui->actionNWChemSurfaceSpinDensity->setEnabled(haveSavedOptimizer);
     ui->actionNWChemOpenLogFile->setEnabled(haveSavedOptimizer);
 
-    bool hasFrequencies = !d->currentDocument.frequencies.isEmpty();
+    bool hasFrequencies = !ts->current.document.frequencies.isEmpty();
     QString infoItemText;
     if (hasFrequencies)
         infoItemText = "View Orbitals/Vibrations...";
@@ -790,7 +1044,7 @@ void MainWindow::syncMenuStates()
         optimizeItemText += "???";
     ui->actionNWChemOptimize->setText(optimizeItemText);
 
-    bool nonEmtpyMolecule = !(d->currentDocument.molecule.isEmpty());
+    bool nonEmtpyMolecule = !(ts->current.document.molecule.isEmpty());
     ui->actionNWChemOptimize->setEnabled(nonEmtpyMolecule);
     ui->toolCleanUpButton->setEnabled(nonEmtpyMolecule);
 
@@ -806,7 +1060,7 @@ void MainWindow::openFile(QString const &filename) {
 
     QString activeSurface;
     MolDocument document;
-    std::unique_ptr<OptimizerNWChem> loadedOpt;
+    std::shared_ptr<OptimizerNWChem> loadedOpt;
 
     try {
         if (filename.endsWith(".cvproj"))
@@ -846,20 +1100,26 @@ void MainWindow::openFile(QString const &filename) {
         return;
     }
 
-    d->mol3dView->clearUndoRedo();
-    d->mol3dView->showMolStruct(document.molecule);
-    if (!activeSurface.isEmpty())
-        d->mol3dView->showVolumeData(document.volumes.value(activeSurface), 1.0E-02);
-    d->activeSurface = activeSurface;
-    d->currentDocument = document;
-    if (loadedOpt)
+    // Replace the current tab's document if it's emtpy
+    auto active_ts = d->activeTabState();
+    bool emptyMolecule = (active_ts->current.document.molecule.isEmpty() &&
+                          active_ts->redoStack.isEmpty() &&
+                          active_ts->undoStack.isEmpty());
+
+    std::unique_ptr<TabState> ts = std::make_unique<TabState>();
+    ts->current.document = document;
+    ts->current.activeSurface = activeSurface;
+//    ts->current.activeSurfaceThreshold = 1.0E-02;
+    ts->current.calculation = loadedOpt;
+    ts->filePath = filename;
+
+    if (emptyMolecule)
     {
-        d->currentNWChemConfig = loadedOpt->getConfiguration();
-        d->savedOptimizer = std::move(loadedOpt);
+        d->tabStates[d->activeTab] = std::move(ts);
+        d->activateTab(d->activeTab);
     }
-    d->updatePropertiesWindow();
-    setWindowTitle(QFileInfo(filename).fileName() + "[*]");
-    setWindowModified(false);
-    setWindowFilePath(filename);
-    syncMenuStates();
+    else
+    {
+        d->newTab(std::move(ts), true);
+    }
 }
