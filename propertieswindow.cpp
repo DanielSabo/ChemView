@@ -87,23 +87,35 @@ void PropertiesWindow::showData(const MolDocument &document, bool optimizerAvail
 
     if (!document.orbitals.isEmpty())
     {
-        QString format;
-        if (optimizerAvailable)
-            format = QStringLiteral("<tr><td><a href='orbital://%1'>%1</a></td><td>%2</td><td>%3</td></tr>");
-        else
-            format = QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td></tr>");
+        QString formatAvailable = QStringLiteral("<tr><td><a href='orbital://%1'>%1</a></td><td>%2</td><td>%3</td></tr>");
+        QString formatUnavailable = QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td></tr>");
 
         stream << "<b>Orbitals:</b>";
         stream << "<table>";
         stream << "<tr><th>ID</th><th>Occupancy</th><th>Energy (au)</th></tr>";
 
+        int emptyOrbitalCount = 0;
+
         for (auto iter = document.orbitals.begin(); iter != document.orbitals.end(); iter++)
         {
-            if (iter->occupancy <= 0.0001)
-                break;
-            //FIXME: Ensure proper rounding of values? https://bugreports.qt.io/browse/QTBUG-38171 seems to indicate it may already happen automatically
+            //TODO: Ensure proper rounding of values? https://bugreports.qt.io/browse/QTBUG-38171 seems to indicate it may already happen automatically
 
-            stream << format.arg(iter->id).arg(iter->occupancy, 0, 'f', 2).arg(iter->energy, 0, 'E', 6);
+            if (iter->occupancy >= 0.0001)
+            {
+                if (optimizerAvailable || document.volumes.contains(iter->id))
+                    stream << formatAvailable.arg(iter->id).arg(iter->occupancy, 0, 'f', 2).arg(iter->energy, 0, 'E', 6);
+                else
+                    stream << formatUnavailable.arg(iter->id).arg(iter->occupancy, 0, 'f', 2).arg(iter->energy, 0, 'E', 6);
+            }
+            else
+            {
+                stream << formatUnavailable.arg(iter->id).arg(iter->occupancy, 0, 'f', 2).arg(iter->energy, 0, 'E', 6);
+
+                //TODO: Imporve layout so we can display all the empty orbitals without getting cluttered
+                emptyOrbitalCount++;
+                if (emptyOrbitalCount > 5)
+                    break;
+            }
         }
 
         stream << "</table><br>";
