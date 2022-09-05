@@ -395,7 +395,10 @@ void MainWindowPrivate::undo()
     auto ts = activeTabState();
 
     if (ts->undoStack.isEmpty())
+    {
+        qDebug() << "undo(): nothing to undo";
         return;
+    }
 
     ts->redoStack.push_back(ts->current);
     ts->current = ts->undoStack.takeLast();
@@ -413,7 +416,11 @@ void MainWindowPrivate::redo()
     auto ts = activeTabState();
 
     if (ts->redoStack.isEmpty())
+    {
+        qDebug() << "undo(): nothing to redo";
         return;
+    }
+
 
     ts->undoStack.push_back(ts->current);
     ts->current = ts->redoStack.takeLast();
@@ -1069,6 +1076,9 @@ void MainWindow::syncMenuStates()
         ui->actionRedo->setText("Redo");
     else
         ui->actionRedo->setText(QString("Redo: %1").arg(ts->redoStack.first().undoDescription));
+
+    ui->actionUndo->setEnabled(!ts->undoStack.isEmpty());
+    ui->actionRedo->setEnabled(!ts->redoStack.isEmpty());
 }
 
 void MainWindow::openFile(QString const &filename) {
