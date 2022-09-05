@@ -41,6 +41,8 @@ struct MolDocState {
 
     QString activeSurface;
     float activeSurfaceThreshold = 0.01;
+
+    QString undoDescription;
 };
 
 struct TabState {
@@ -100,7 +102,7 @@ public:
     void closeTab(int index);
     TabState *activeTabState();
 
-    void addUndoEvent();
+    void addUndoEvent(QString description);
     void undo();
     void redo();
     void clearUndoRedo();
@@ -252,7 +254,7 @@ void MainWindowPrivate::runCalculation(std::shared_ptr<Optimizer> opt, QString t
     }, Qt::QueuedConnection); // Use QueuedConnection so we can delete the optimizer within the signal handler
 
     if (generateUndoStep)
-        addUndoEvent();
+        addUndoEvent("Calculation");
 
     auto ts = activeTabState();
     ts->current.calculation = opt;
@@ -374,12 +376,16 @@ TabState *MainWindowPrivate::activeTabState()
     return tabStates.at(activeTab).get();
 }
 
-void MainWindowPrivate::addUndoEvent()
+void MainWindowPrivate::addUndoEvent(QString description)
 {
+    Q_Q(MainWindow);
     auto ts = activeTabState();
 
     ts->undoStack.push_back(ts->current);
     ts->redoStack.clear();
+    ts->current.undoDescription = description;
+
+    q->ui->actionUndo->setText(QString("Undo: %1").arg(description));
 }
 
 void MainWindowPrivate::undo()
@@ -499,8 +505,8 @@ MainWindow::MainWindow(QWidget *parent)
             });
 
     connect(ui->mol3dview, &Mol3dView::addUndoEvent, this,
-            [d]() {
-                d->addUndoEvent();
+            [d](QString description) {
+                d->addUndoEvent(description);
             });
 
     connect(ui->tabBar, &QTabBar::currentChanged, this,
@@ -1053,6 +1059,16 @@ void MainWindow::syncMenuStates()
         ui->actionStyle_Stick->setChecked(true);
     else // Mol3dView::DrawStyle::BallAndStick
         ui->actionStyle_Ball_and_Stick->setChecked(true);
+
+    if (ts->current.undoDescription.isEmpty())
+        ui->actionUndo->setText("Undo");
+    else
+        ui->actionUndo->setText(QString("Undo: %1").arg(ts->current.undoDescription));
+
+    if (ts->redoStack.isEmpty() || ts->redoStack.first().undoDescription.isEmpty())
+        ui->actionRedo->setText("Redo");
+    else
+        ui->actionRedo->setText(QString("Redo: %1").arg(ts->redoStack.first().undoDescription));
 }
 
 void MainWindow::openFile(QString const &filename) {

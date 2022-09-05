@@ -653,7 +653,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                     groupStructure = MolStruct::fromSDF(":structure/methyl.mol");
                 auto newStructure = d->currentStructure;
                 newStructure.replaceLeafWithRGroup(atom->id, groupStructure);
-                addUndoEvent();
+                addUndoEvent("Add atom");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
@@ -667,7 +667,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                     if (newStructure.atoms[i].element == "R1")
                         newStructure.eraseGroup(i);
                 newStructure.recenter();
-                addUndoEvent();
+                addUndoEvent("Add atom");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
@@ -679,7 +679,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
             {
                 auto newStructure = d->currentStructure;
                 newStructure.addHydrogenToAtom(atom->id, d->hoverIntersectVector);
-                addUndoEvent();
+                addUndoEvent("Add valence");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
@@ -689,7 +689,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                 MolStruct newStructure;
                 Atom a; // Default atom is a hydrogen at {0, 0, 0}
                 newStructure.atoms.push_back(a);
-                addUndoEvent();
+                addUndoEvent("Add atom");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
@@ -703,14 +703,14 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                 {
                     auto newStructure = d->currentStructure;
                     newStructure.deleteAtom(atom->id);
-                    addUndoEvent();
+                    addUndoEvent("Delete valence");
                     showMolStruct(newStructure);
                 }
                 else
                 {
                     auto newStructure = d->currentStructure;
                     newStructure.eraseGroup(atom->id);
-                    addUndoEvent();
+                    addUndoEvent("Delete atom");
                     showMolStruct(newStructure);
                 }
 
@@ -756,7 +756,10 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                         newStructure.bonds[bond->id].order--;
                 }
 
-                addUndoEvent();
+                if (ctrlMod)
+                    addUndoEvent("Delete bond");
+                else
+                    addUndoEvent("Break bond");
                 showMolStruct(newStructure);
                 mouseConsumed = true;
                 refreshPicker = true;
@@ -780,7 +783,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                         //TODO: We need a function to check if this will pass
                         if (newStructure.hydrogensToBond(from, to))
                         {
-                            addUndoEvent();
+                            addUndoEvent("Form bond");
                             showMolStruct(newStructure);
                             refreshPicker = true;
                         }
@@ -799,14 +802,16 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                 int from = newStructure.bonds[bond->id].from;
                 int to = newStructure.bonds[bond->id].to;
 
-                // With the bond tool delete the bond only, don't add another hydrogen
+                // When breaking a bond to a hydrogen just delete the bond
                 if (newStructure.atoms[from].element == "H" && newStructure.isLeafAtom(from))
                 {
                         newStructure.bonds.removeAt(bond->id);
+                        addUndoEvent("Delete bond");
                 }
                 else if (newStructure.atoms[to].element == "H" && newStructure.isLeafAtom(to))
                 {
                         newStructure.bonds.removeAt(bond->id);
+                        addUndoEvent("Delete bond");
                 }
                 else
                 {
@@ -816,9 +821,9 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                         newStructure.bonds.removeAt(bond->id);
                     else
                         newStructure.bonds[bond->id].order--;
+                    addUndoEvent("Break bond");
                 }
 
-                addUndoEvent();
                 showMolStruct(newStructure);
                 refreshPicker = true;
                 mouseConsumed = true;

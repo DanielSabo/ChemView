@@ -37,7 +37,7 @@ ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(
 
         if (modifided)
         {
-            view->addUndoEvent();
+            view->addUndoEvent("Adjust charge");
             view->showMolStruct(newStructure);
             view->setSelection(selection);
         }
@@ -63,7 +63,7 @@ ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(
 
             if (modifided)
             {
-                view->addUndoEvent();
+                view->addUndoEvent("Change element");
                 view->showMolStruct(newStructure);
                 view->setSelection(selection);
             }

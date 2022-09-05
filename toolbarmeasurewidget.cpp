@@ -211,7 +211,7 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
                 mol.atoms[id].setPos(mol.atoms[id].posToVector() + delta);
 
             auto selection = view->getSelection();
-            view->addUndoEvent();
+            view->addUndoEvent("Adjust bond length");
             view->showMolStruct(mol);
             view->setSelection(selection);
         }
@@ -236,7 +236,7 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
             adjustBondAngle(mol, targetAtoms, newAngle);
 
             auto selection = view->getSelection();
-            view->addUndoEvent();
+            view->addUndoEvent("Adjust bond angle");
             view->showMolStruct(mol);
             view->setSelection(selection);
         }
@@ -255,7 +255,7 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
             adjustDihedralAngle(mol, targetAtoms, newAngle);
 
             auto selection = view->getSelection();
-            view->addUndoEvent();
+            view->addUndoEvent("Adjust dihedral angle");
             view->showMolStruct(mol);
             view->setSelection(selection);
         }

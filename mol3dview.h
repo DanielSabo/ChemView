@@ -57,7 +57,7 @@ public:
     void setAddRGroup(MolStruct m);
 
 signals:
-    void addUndoEvent();
+    void addUndoEvent(QString description = {});
     void moleculeChanged();
     void selectionChanged(QList<int>);
     void hoverInfo(QString info);
