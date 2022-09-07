@@ -109,7 +109,39 @@ QString NWChemConfiguration::generateConfig() const
     return result;
 }
 
+namespace {
+    static const QSet<QString> cartesianBasisSets = QSet<QString>(
+                {"3-21g", "3-21++g", "3-21gs", "3-21++gs", "3-21gsp", "3-21gs_polarization",
+                 "4-22gsp", "4-31g", "6-31g-blaudeau", "6-31++g", "6-31gs-blaudeau", "6-31+gs",
+                 "6-31++gs", "6-31gs_polarization", "6-31gss", "6-31++gss", "6-31gss_polarization",
+                 "blaudeau_polarization", "demon_coulomb_fitting", "dgauss_a1_dft_coulomb_fitting",
+                 "dgauss_a1_dft_exchange_fitting", "dgauss_a2_dft_coulomb_fitting",
+                 "dgauss_a2_dft_exchange_fitting", "dhms_polarization", "dunning-hay_diffuse",
+                 "dunning-hay_double_rydberg", "dunning-hay_rydberg", "dz_+_double_rydberg_dunning-hay",
+                 "dz_dunning", "dzp_+_diffuse_dunning", "dzp_dunning", "dzp_+_rydberg_dunning",
+                 "dz_+_rydberg_dunning", "dzvp2_dft_orbital", "dzvp_dft_orbital", "gamess_pvtz",
+                 "gamess_vtz", "hondo7_polarization", "huzinaga_polarization", "iglo-ii", "iglo-iii",
+                 "mclean_chandler_vtz", "midi_huzinaga", "mini_huzinaga", "mini_scaled", "sbkjc_vdz_ecp",
+                 "sto-2g", "sv_+_double_rydberg_dunning-hay", "sv_dunning-hay", "svp_+_diffuse_dunning-hay",
+                 "svp_+_diffuse_+_rydberg", "svp_dunning-hay", "svp_+_rydberg_dunning-hay",
+                 "sv_+_rydberg_dunning-hay", "tzvp_dft_orbital"});
+}
+
 QString NWChemConfiguration::generateBasisSection() const
 {
-    return QStringLiteral("basis\n  * library %1\nend\n").arg(basis);
+    /* Gaussian basis sets can be defined using either spherical or Cartesian
+     * coordinates, and to match the expected energy values calculations using
+     * them should be performed using the same coordinate systems. Unfortunately
+     * NWChem defaults to Cartesian coordinates for all basis sets, and we have
+     * to manually specify which type to use.
+     *
+     * A more correct way of doing this would be to inspect the basis set file
+     * itself at runtime, but for now we just hard code a list of the Cartesian
+     * basis sets included in NWChem 7.0.2.
+     */
+
+    bool isCartesian = cartesianBasisSets.contains(basis.toLower().trimmed());
+
+    return QStringLiteral("basis %1\n  * library %2\nend\n")
+            .arg(isCartesian ? "cartesian" : "spherical").arg(basis);
 }
