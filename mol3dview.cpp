@@ -36,6 +36,7 @@
 #include <QFrameAction>
 #include <QElapsedTimer>
 #include <cmath>
+#include <QPointLight>
 
 namespace {
 static Qt3DExtras::QDiffuseSpecularMaterial *makeMaterial(Qt3DCore::QNode *parent, float r, float g, float b) {
@@ -130,6 +131,8 @@ public:
     Qt3DExtras::Qt3DWindow *view = nullptr;
     Qt3DCore::QEntity *rootEntity = nullptr;
     Qt3DCore::QEntity *structureEntity = nullptr;
+    Qt3DCore::QEntity *lightEntity = nullptr;
+    Qt3DCore::QTransform *lightTransform = nullptr;
     Qt3DRender::QLayer *transparentRenderLayer = nullptr;
 
     Qt3DRender::QScreenRayCaster *rayPicker = nullptr;
@@ -205,6 +208,14 @@ void Mol3dViewPrivate::initScene()
     atomMaterials = generateMaterials(rootEntity);
 
     structureEntity = new Qt3DCore::QEntity(rootEntity);
+    lightEntity = new Qt3DCore::QEntity(rootEntity);
+    lightTransform = new Qt3DCore::QTransform();
+    auto light = new Qt3DRender::QPointLight(rootEntity);
+    light->setColor(Qt::white);
+    light->setIntensity(0.5);
+    lightEntity->addComponent(light);
+    lightEntity->addComponent(lightTransform);
+
     view->setRootEntity(rootEntity);
 
     /* How to properly render transparent objects: https://stackoverflow.com/questions/55001233/qt3d-draw-transparent-qspheremesh-over-triangles
@@ -273,6 +284,8 @@ void Mol3dViewPrivate::updateCamera()
     camera->lens()->setPerspectiveProjection(45.0f, float(view->width())/float(view->height()), 0.1f, 1000.0f);
 
     auto camPos = cameraRotation.rotatedVector(QVector3D(0.0f, 0.0f, camDistance));
+    auto lightPos = cameraRotation.rotatedVector(QVector3D(camDistance, camDistance, 0.0f));
+    lightTransform->setTranslation(lightPos);
     camera->setPosition(camPos);
     camera->setViewCenter(QVector3D(0, 0, 0));
     auto upVec = cameraRotation.rotatedVector(QVector3D(0.0f, 1.0f, 0.0));
