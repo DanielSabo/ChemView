@@ -40,7 +40,11 @@
 namespace {
 static Qt3DExtras::QDiffuseSpecularMaterial *makeMaterial(Qt3DCore::QNode *parent, float r, float g, float b) {
     auto result = new Qt3DExtras::QDiffuseSpecularMaterial(parent);
+    r = r * 0.5 + 0.35;
+    g = g * 0.5 + 0.35;
+    b = b * 0.5 + 0.35;
     result->setAmbient(QColor::fromRgbF(r, g, b, 1.0f));
+    result->setDiffuse(QColor::fromRgbF(r, g, b, 1.0f));
     return result;
 }
 
