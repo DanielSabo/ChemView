@@ -500,6 +500,25 @@ bool MolStruct::replaceLeafWithRGroup(int id, MolStruct rGroup)
     return true;
 }
 
+void MolStruct::addFragment(MolStruct fragment)
+{
+    QMap<int, int> atomMapping;
+    for (int i = 0; i < fragment.atoms.size(); ++i)
+    {
+        atomMapping[i] = atoms.size();
+        atoms.append(fragment.atoms.at(i));
+    }
+
+    for (auto &bond: fragment.bonds)
+    {
+        Bond newBond;
+        newBond.order = bond.order;
+        newBond.from = atomMapping.value(bond.from);
+        newBond.to = atomMapping.value(bond.to);
+        bonds.append(newBond);
+    }
+}
+
 void MolStruct::addHydrogenToAtom(int id)
 {
     // Pretty sure there's a smarter way to generate candidate points
@@ -699,7 +718,7 @@ void MolStruct::deleteBond(int id)
     bonds.removeAt(id);
 }
 
-void MolStruct::recenter()
+void MolStruct::recenter(Vector3D offset)
 {
     if (atoms.empty())
         return;
@@ -724,6 +743,10 @@ void MolStruct::recenter()
     double center_x = (max_x - min_x)/2.0 + min_x;
     double center_y = (max_y - min_y)/2.0 + min_y;
     double center_z = (max_z - min_z)/2.0 + min_z;
+
+    center_x -= offset.x();
+    center_y -= offset.y();
+    center_z -= offset.z();
 
     for (auto &atom: atoms)
     {

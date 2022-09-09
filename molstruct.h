@@ -64,13 +64,15 @@ public:
     void deleteAtom(int id);
     void deleteBond(int id);
 
-    void recenter();
+    void recenter(Vector3D offset = {});
     void recenterOn(int id);
 
     bool hydrogensToBond(int from, int to);
     // Remove an atom and its valences after breaking any bonds connecting to it
     void eraseGroup(int id);
     bool replaceLeafWithRGroup(int id, MolStruct rGroup);
+    // Add another MolStruct to this one as an unconnected fragment
+    void addFragment(MolStruct fragment);
     // Add an automatically positioned hydrogen to an atom
     void addHydrogenToAtom(int id);
     bool addHydrogenToAtom(int id, QVector3D orientation);
