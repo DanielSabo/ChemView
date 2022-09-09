@@ -97,6 +97,24 @@ static Qt3DExtras::QDiffuseSpecularMaterial *materialForElement(QMap<int, Qt3DEx
     return mats.value(atomicNumber, defaultMaterial);
 }
 
+// Map a click position to the XY plane of the view
+static QVector3D clickTo3DPos(QPoint const &click, Qt3DExtras::Qt3DWindow const *view)
+{
+    auto camera = view->camera();
+
+    // Calculate the dimensions of the frustum plane through the origin
+    // https://stackoverflow.com/questions/13665932/calculating-the-viewing-frustum-in-a-3d-space
+    float camDistance = camera->position().length();
+    float planeHeight = 2.0f * tan(camera->fieldOfView() * (M_PI)/(180.0f * 2.0f)) * camDistance;
+    float planeWidth = planeHeight * camera->aspectRatio();
+
+    QVector3D posVec(planeWidth  * ( float(click.x())/view->width() - 0.5 ),
+                     planeHeight * ( 0.5 - float(click.y())/view->height() ),
+                     0.0f);
+
+    return camera->transform()->rotation().rotatedVector(posVec);
+}
+
 struct AtomListEntry {
     AtomEntity *entity = nullptr;
     bool hovered = false;
@@ -675,20 +693,27 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
 
                 mouseConsumed = true;
             }
-            else if (d->currentStructure.atoms.empty())
+            else if (!atom && !bond)
             {
-                auto newStructure = d->addToolRGroup;
-                if (newStructure.isEmpty())
-                    newStructure = MolStruct::fromSDF(":structure/methyl.mol");
-                for (int i = 0; i < newStructure.atoms.size(); ++i)
-                    if (newStructure.atoms[i].element == "R1")
-                        newStructure.eraseGroup(i);
-                newStructure.recenter();
-                addUndoEvent("Add atom");
+                auto newFragment = d->addToolRGroup;
+                if (newFragment.isEmpty())
+                    newFragment = MolStruct::fromSDF(":structure/methyl.mol");
+                for (int i = 0; i < newFragment.atoms.size(); ++i)
+                    if (newFragment.atoms[i].element == "R1")
+                        newFragment.eraseGroup(i);
+
+                QVector3D posVec = clickTo3DPos(static_cast<QMouseEvent *>(event)->pos(), d->view);
+
+                newFragment.recenter(Vector3D(posVec));
+
+                auto newStructure = d->currentStructure;
+                newStructure.addFragment(newFragment);
+                addUndoEvent("Add fragment");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
             }
+
         }
         else if (d->toolMode == ToolModeAddValence && isDoubleClick)
         {
@@ -701,12 +726,20 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
 
                 mouseConsumed = true;
             }
-            else if (d->currentStructure.atoms.empty())
+            else if (!atom && !bond)
             {
-                MolStruct newStructure;
-                Atom a; // Default atom is a hydrogen at {0, 0, 0}
-                newStructure.atoms.push_back(a);
-                addUndoEvent("Add atom");
+                QVector3D posVec = clickTo3DPos(static_cast<QMouseEvent *>(event)->pos(), d->view);
+
+                MolStruct newFragment;
+                Atom a;
+                a.element = "H";
+                a.setPos(posVec);
+                newFragment.atoms.push_back(a);
+
+                auto newStructure = d->currentStructure;
+                newStructure.addFragment(newFragment);
+
+                addUndoEvent("Add fragment");
                 showMolStruct(newStructure);
 
                 mouseConsumed = true;
