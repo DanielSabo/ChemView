@@ -598,8 +598,8 @@ bool MainWindow::doSave(QString filename)
         else
         {
             // If we can't save this filetype default to a file with the same basename
-            int suffixLen = QFileInfo(filename).completeSuffix().length();
-            savePath = filename.chopped(suffixLen) + ".mol";
+            int suffixLen = QFileInfo(filename).completeSuffix().length() + 1;
+            savePath = filename.chopped(suffixLen) + ".cvproj";
         }
 
         filename = QFileDialog::getSaveFileName(this, "Save As...", savePath, FileHandlers::getSaveFilters());
