@@ -500,12 +500,12 @@ void Mol3dViewPrivate::pickerHitUpdate(const Qt3DRender::QAbstractRayCaster::Hit
     if (toolMode == Mol3dView::ToolModeAdd)
     {
         newBond = -1;
-        if ((newAtom != -1) && (currentStructure.atoms[newAtom].element != "H"))
+        if ((newAtom != -1) && ((currentStructure.atoms[newAtom].element != "H") || !currentStructure.isLeafAtom(newAtom)))
             newAtom = -1;
     }
     else if (toolMode == Mol3dView::ToolModeBond)
     {
-        if ((newAtom != -1) && (currentStructure.atoms[newAtom].element != "H"))
+        if ((newAtom != -1) && ((currentStructure.atoms[newAtom].element != "H") || !currentStructure.isLeafAtom(newAtom)))
             newAtom = -1;
     }
     else if (toolMode == Mol3dView::ToolModeSelectOne || toolMode == Mol3dView::ToolModeSelect)
@@ -680,7 +680,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
 
         if (d->toolMode == ToolModeAdd && isDoubleClick)
         {
-            if (atom && d->currentStructure.isLeafAtom(atom->id))
+            if (atom && d->currentStructure.atoms[atom->id].element == "H" && d->currentStructure.isLeafAtom(atom->id))
             {
                 auto groupStructure = d->addToolRGroup;
                 // TODO: Load methyl in init so addToolRGroup is always set
