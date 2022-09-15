@@ -598,7 +598,7 @@ bool MainWindow::doSave(QString filename)
         else
         {
             // If we can't save this filetype default to a file with the same basename
-            int suffixLen = QFileInfo(filename).completeSuffix().length() + 1;
+            int suffixLen = QFileInfo(filename).suffix().length() + 1;
             savePath = filename.chopped(suffixLen) + ".cvproj";
         }
 

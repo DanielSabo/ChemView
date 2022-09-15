@@ -68,7 +68,7 @@ const QList<FileTypeInfo> &getFileTypes()
 
 bool canOpenPath(QString path)
 {
-    QString suffix = QFileInfo(path).completeSuffix();
+    QString suffix = QFileInfo(path).suffix();
 
     for (const auto &filetype: getFileTypes())
     {
@@ -81,7 +81,7 @@ bool canOpenPath(QString path)
 
 bool canSavePath(QString path)
 {
-    QString suffix = QFileInfo(path).completeSuffix();
+    QString suffix = QFileInfo(path).suffix();
 
     for (const auto &filetype: getFileTypes())
     {
