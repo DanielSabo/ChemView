@@ -582,27 +582,26 @@ void MainWindow::connectActions()
     connect(ui->actionPreferences, &QAction::triggered, this, &MainWindow::actionPreferences);
 }
 
-bool MainWindow::doSave(QString filename)
+bool MainWindow::doSave(QString filename, bool saveAs)
 {
     Q_D(MainWindow);
 
-    // TODO: This should probably get even smarter and consider data loss
-    if (filename.isEmpty() || !FileHandlers::canSavePath(filename)) /* Save As... */
+    if (filename.isEmpty())
     {
-        QString savePath;
+        QDir saveDir = QDir(QSettings().value("MainWindow/openSavePath", QDir::homePath()).toString());
+        filename = saveDir.filePath("Untitled.cvproj");
+        saveAs = true;
+    }
+    else if (!FileHandlers::canSavePath(filename)) {
+        QFileInfo fileInfo(filename);
+        QDir saveDir = fileInfo.dir();
+        filename = saveDir.filePath(fileInfo.baseName() + ".cvproj");
+        saveAs = true;
+    }
 
-        if (filename.isEmpty())
-        {
-            savePath = QSettings().value("MainWindow/openSavePath", QDir::homePath()).toString();
-        }
-        else
-        {
-            // If we can't save this filetype default to a file with the same basename
-            int suffixLen = QFileInfo(filename).suffix().length() + 1;
-            savePath = filename.chopped(suffixLen) + ".cvproj";
-        }
-
-        filename = QFileDialog::getSaveFileName(this, "Save As...", savePath, FileHandlers::getSaveFilters());
+    if (saveAs)
+    {
+        filename = QFileDialog::getSaveFileName(this, "Save As...", filename, FileHandlers::getSaveFilters());
 
         if (filename.isEmpty())
             return false;
@@ -762,7 +761,7 @@ void MainWindow::actionSave()
 
 void MainWindow::actionSaveAs()
 {
-    doSave({});
+    doSave(windowFilePath(), true);
 }
 
 void MainWindow::actionUndo()

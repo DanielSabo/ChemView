@@ -64,7 +64,7 @@ private:
 
     void connectActions();
 
-    bool doSave(QString filename);
+    bool doSave(QString filename, bool saveAs = false);
     bool promptSaveCurrentTab();
     bool promptSaveAll();
 };
