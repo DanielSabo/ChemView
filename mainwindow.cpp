@@ -875,12 +875,14 @@ void MainWindow::toolButtonClicked(QAbstractButton *button)
         d->mol3dView->setToolMode(Mol3dView::ToolModeBond);
     else if (button == ui->toolPropsButton)
     {
-        d->mol3dView->setToolMode(Mol3dView::ToolModeSelectOne);
+        d->mol3dView->setToolMode(Mol3dView::ToolModeSelect);
+        d->mol3dView->setSelectionLimit(1, 1);
         d->replaceToolWidget(new ToolbarPropsWidget(this, d->mol3dView));
     }
     else if (button == ui->toolMeasureButton)
     {
         d->mol3dView->setToolMode(Mol3dView::ToolModeSelect);
+        d->mol3dView->setSelectionLimit(2, 0);
         d->replaceToolWidget(new ToolbarMeasureWidget(this, d->mol3dView));
     }
 }

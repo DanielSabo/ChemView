@@ -4,7 +4,6 @@
 #include "element.h"
 
 #include <QHBoxLayout>
-#include <QLabel>
 
 ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(parent), view(v)
 {
@@ -12,37 +11,62 @@ ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(
     l->setContentsMargins(0,0,0,0);
     l->setSpacing(4);
 
-    spin = new QSpinBox(this);
-    spin->setRange(-15,15);
-    l->addWidget(new QLabel("Charge:", this));
-    l->addWidget(spin);
+    chargeOrderLabel = new QLabel("Charge:", this);
+    chargeOrderSpinBox = new QSpinBox(this);
+    l->addWidget(chargeOrderLabel);
+    l->addWidget(chargeOrderSpinBox);
 
+    selectorLabel = new QLabel("Element:", this);
     selector = new ElementSelector(this);
-    l->addWidget(new QLabel("Element:"));
+    l->addWidget(selectorLabel);
     l->addWidget(selector);
 
-    connect(spin, static_cast<void(QSpinBox::*)(int value)>(&QSpinBox::valueChanged), this, [this](int charge) {
+    setEnabled(false);
+    atomMode(0, "C");
+
+    connect(chargeOrderSpinBox, static_cast<void(QSpinBox::*)(int value)>(&QSpinBox::valueChanged), this, [this](int value) {
         auto newStructure = view->getMolStruct();
         auto selection = view->getSelection();
 
-        bool modifided = false;
-        for (auto const &s: selection)
+        if (!selection.atoms.isEmpty())
         {
-            if (newStructure.atoms[s].charge != charge)
+            bool modified = false;
+            for (auto const &a: selection.atoms)
             {
-                modifided = true;
-                newStructure.atoms[s].charge = charge;
+                if (newStructure.atoms[a].charge != value)
+                {
+                    modified = true;
+                    newStructure.atoms[a].charge = value;
+                }
+            }
+
+            if (modified)
+            {
+                view->addUndoEvent("Adjust charge");
+                view->showMolStruct(newStructure);
+                view->setSelection(selection);
             }
         }
-
-        if (modifided)
+        else if (!selection.bonds.isEmpty())
         {
-            view->addUndoEvent("Adjust charge");
-            view->showMolStruct(newStructure);
-            view->setSelection(selection);
+            bool modified = false;
+            for (auto const &b: selection.bonds)
+            {
+                if (newStructure.bonds[b].order != value)
+                {
+                    modified = true;
+                    newStructure.bonds[b].order = value;
+                }
+            }
+
+            if (modified)
+            {
+                view->addUndoEvent("Adjust bond order");
+                view->showMolStruct(newStructure);
+                view->setSelection(selection);
+            }
         }
     });
-
 
     connect(selector, &ElementSelector::elementChanged, this, [this](QString abbr){
         Element e = Element::fromAbbr(abbr);
@@ -51,17 +75,17 @@ ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(
             auto newStructure = view->getMolStruct();
             auto selection = view->getSelection();
 
-            bool modifided = false;
-            for (auto const &s: selection)
+            bool modified = false;
+            for (auto const &a: selection.atoms)
             {
-                if (newStructure.atoms[s].element != e.abbr)
+                if (newStructure.atoms[a].element != e.abbr)
                 {
-                    modifided = true;
-                    newStructure.atoms[s].element = e.abbr;
+                    modified = true;
+                    newStructure.atoms[a].element = e.abbr;
                 }
             }
 
-            if (modifided)
+            if (modified)
             {
                 view->addUndoEvent("Change element");
                 view->showMolStruct(newStructure);
@@ -70,29 +94,51 @@ ToolbarPropsWidget::ToolbarPropsWidget(QWidget *parent, Mol3dView *v) : QWidget(
         }
     });
 
-    connect(view, &Mol3dView::selectionChanged, this, [this](QList<int> selection) {
+    connect(view, &Mol3dView::selectionChanged, this, [this](Mol3dView::Selection selection) {
         // Don't modifying the atom when we update the display values
-        const QSignalBlocker blockerA(spin);
+        const QSignalBlocker blockerA(chargeOrderSpinBox);
         const QSignalBlocker blockerB(selector);
 
-        if (selection.isEmpty())
+        if (!selection.atoms.isEmpty())
         {
-            spin->setValue(0);
-            setEnabled(false);
-            //TODO: Add an "invalid/disabled" mode to the selector widget
-            selector->setSelectedElement("C");
+            setEnabled(true);
+
+            int id = selection.atoms.first();
+            auto const &atom = view->getMolStruct().atoms.at(id);
+
+            atomMode(atom.charge, atom.element);
+        }
+        else if (!selection.bonds.isEmpty())
+        {
+            setEnabled(true);
+
+            int id = selection.bonds.first();
+            auto const &bond = view->getMolStruct().bonds.at(id);
+            bondMode(bond.order);
         }
         else
         {
-            setEnabled(true);
-            int id = selection.first();
-            auto const &atom = view->getMolStruct().atoms.at(id);
-
-            spin->setValue(atom.charge);
-            selector->setSelectedElement(atom.element);
+            setEnabled(false);
+            atomMode(0, "C");
         }
     });
+}
 
-    if (view->getSelection().isEmpty())
-        setEnabled(false);
+void ToolbarPropsWidget::atomMode(int charge, QString element)
+{
+    chargeOrderLabel->setText("Charge:");
+    chargeOrderSpinBox->setRange(-15,15);
+    chargeOrderSpinBox->setValue(charge);
+    selectorLabel->setVisible(true);
+    selector->setSelectedElement(element);
+    selector->setVisible(true);
+}
+
+void ToolbarPropsWidget::bondMode(int order)
+{
+    chargeOrderSpinBox->setRange(1,3);
+    chargeOrderSpinBox->setValue(order);
+    chargeOrderLabel->setText("Bond Order:");
+    selectorLabel->setVisible(false);
+    selector->setVisible(false);
 }

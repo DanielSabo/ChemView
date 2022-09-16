@@ -37,12 +37,11 @@ public:
         ToolModeAddValence,
         ToolModeDelete,
         ToolModeBond,
-        ToolModeSelectOne,
         ToolModeSelect
     };
     void setToolMode(ToolMode m);
     ToolMode getToolMode();
-    void setSelectionLimit(int maxSelected);
+    void setSelectionLimit(int maxAtoms, int maxBonds);
 
     struct Selection {
         QList<int> atoms;
@@ -50,8 +49,8 @@ public:
     };
     void setHighlight(Selection s);
 
-    QList<int> getSelection();
-    void setSelection(const QList<int> &selection);
+    Selection getSelection();
+    void setSelection(const Selection &selection);
     void modifySelectionCharge(int newCharge);
     void modifySelectionElement(int atomicNumber);
     void setAddRGroup(MolStruct m);
@@ -59,7 +58,7 @@ public:
 signals:
     void addUndoEvent(QString description = {});
     void moleculeChanged();
-    void selectionChanged(QList<int>);
+    void selectionChanged(Selection s);
     void hoverInfo(QString info);
 
 private:

@@ -261,12 +261,12 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
         }
     });
 
-    connect(view, &Mol3dView::selectionChanged, this, [this](QList<int> selection) {
+    connect(view, &Mol3dView::selectionChanged, this, [this](Mol3dView::Selection selection) {
                 Mol3dView::Selection highlight;
 
                 targetAtoms = {};
 
-                if (selection.length() < 2)
+                if (selection.atoms.length() < 2)
                 {
                     label1->setText("Select atoms to measure.");
                     label1->setVisible(true);
@@ -274,20 +274,20 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
                     edit1->setVisible(false);
                     edit2->setVisible(false);
                 }
-                else if (selection.length() == 2)
+                else if (selection.atoms.length() == 2)
                 {
                     auto mol = this->view->getMolStruct();
-                    QVector<int> path = mol.generateGraph().findPath(selection[0], selection[1], 2);
+                    QVector<int> path = mol.generateGraph().findPath(selection.atoms[0], selection.atoms[1], 2);
 
-                    auto const &a = mol.atoms[selection[0]];
-                    auto const &b = mol.atoms[selection[1]];
+                    auto const &a = mol.atoms[selection.atoms[0]];
+                    auto const &b = mol.atoms[selection.atoms[1]];
                     float length = (a.posToVector() - b.posToVector()).length();
 
                     label1->setText(QStringLiteral(u"Distance:"));
                     if (path.size() == 2)
                     {
                         label1->setText(QStringLiteral(u"Bond length:"));
-                        targetAtoms = {selection[0], selection[1]};
+                        targetAtoms = {selection.atoms[0], selection.atoms[1]};
                     }
                     edit1->setText(QString::number(length));
                     label1->setVisible(true);
@@ -306,7 +306,7 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
                         angleDescription = QStringLiteral(u"Angle:");
                         angleValue = QString::number(angle, 'f', 4);
 
-                        targetAtoms = {selection[0], common, selection[1]};
+                        targetAtoms = {selection.atoms[0], common, selection.atoms[1]};
                     }
                     else if (path.size() == 4) // Or do we have a dihedral
                     {
@@ -323,7 +323,7 @@ ToolbarMeasureWidget::ToolbarMeasureWidget(QWidget *parent, Mol3dView *v) : QWid
                         angleValue = QString::number(angle, 'f', 4);
 
                         if (!std::isnan(angle))
-                            targetAtoms = {selection[0], common1, common2, selection[1]};
+                            targetAtoms = {selection.atoms[0], common1, common2, selection.atoms[1]};
                         else
                             angleValue = "N/A";
                     }

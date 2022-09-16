@@ -127,6 +127,7 @@ struct AtomListEntry {
 struct BondListEntry {
     BondEntity *entity = nullptr;
     bool hovered = false;
+    bool selected = false;
     BondHighlightEntity *highightEntity = nullptr;
 };
 }
@@ -177,11 +178,13 @@ public:
     QList<AtomListEntry> atomEntities;
     QList<BondListEntry> bondEntities;
 
-    int selectionLimit = 0;
+    int atomSelectionLimit = 0;
+    int bondSelectionLimit = 0;
 
     QSet<BillboardEntity *> billboards;
 
-    QList<int> selection;
+    QList<int> selectionAtoms;
+    QList<int> selectionBonds;
     QList<int> highlightAtoms;
 
     QString statusMessage;
@@ -191,7 +194,8 @@ public:
 
     void rotate(float pitch, float yaw);
     void updateCamera();
-    void selectAtom(int id);
+    void setAtomSelected(int id, bool selected);
+    void setBondSelected(int id, bool selected);
     void syncAtomHighlight(int id);
     void syncBondHighlight(int id);
     void clearSelection();
@@ -315,20 +319,44 @@ void Mol3dViewPrivate::updateCamera()
         b.entity->updatePosition(camPos, upVec);
 }
 
-void Mol3dViewPrivate::selectAtom(int id)
+void Mol3dViewPrivate::setAtomSelected(int id, bool selected)
 {
     if (id < 0 || id >= atomEntities.size())
     {
-        qDebug() << "Invalid selection id:" << id;
+        qDebug() << "setAtomSelected(): invalid id:" << id;
         return;
     }
 
-    if (selection.contains(id))
+    if (selectionAtoms.contains(id) == selected)
         return;
 
-    selection.push_back(id);
-    atomEntities[id].selected = true;
+    if (selected)
+        selectionAtoms.push_back(id);
+    else
+        selectionAtoms.removeOne(id);
+
+    atomEntities[id].selected = selected;
     syncAtomHighlight(id);
+}
+
+void Mol3dViewPrivate::setBondSelected(int id, bool selected)
+{
+    if (id < 0 || id >= bondEntities.size())
+    {
+        qDebug() << "setBondSelected(): invalid id:" << id;
+        return;
+    }
+
+    if (selectionBonds.contains(id) == selected)
+        return;
+
+    if (selected)
+        selectionBonds.push_back(id);
+    else
+        selectionBonds.removeOne(id);
+
+    bondEntities[id].selected = selected;
+    syncBondHighlight(id);
 }
 
 void Mol3dViewPrivate::syncAtomHighlight(int id)
@@ -369,7 +397,7 @@ void Mol3dViewPrivate::syncBondHighlight(int id)
     auto &target = bondEntities[id];
 
     //if (!target.hovered && !target.selected && !target.highlighted)
-    if (!target.hovered)
+    if (!target.hovered && !target.selected)
     {
         if (target.highightEntity)
         {
@@ -386,6 +414,8 @@ void Mol3dViewPrivate::syncBondHighlight(int id)
 
         if (target.hovered)
             target.highightEntity->setColor(QColor::fromRgb(66, 167, 245));
+        else if (target.selected)
+            target.highightEntity->setColor(QColor::fromRgb(245, 188, 66));
     }
 }
 
@@ -393,12 +423,19 @@ void Mol3dViewPrivate::clearSelection()
 {
     Q_Q(Mol3dView);
 
-    for (int id: selection)
+    for (int id: selectionAtoms)
     {
         atomEntities[id].selected = false;
         syncAtomHighlight(id);
     }
-    selection = {};
+    selectionAtoms = {};
+
+    for (int id: selectionBonds)
+    {
+        bondEntities[id].selected = false;
+        syncBondHighlight(id);
+    }
+    selectionBonds = {};
 
     q->setHighlight({});
 
@@ -428,9 +465,16 @@ void Mol3dViewPrivate::updateStatusMessage()
     {
         message = QStringLiteral("Select two valence hydrogens to form a bond or ctrl+click a bond to break it");
     }
-    else if (toolMode == Mol3dView::ToolModeSelectOne || toolMode == Mol3dView::ToolModeSelect)
+    else if (toolMode == Mol3dView::ToolModeSelect)
     {
-        message = QStringLiteral("Click on an atom to select it");
+        if (atomSelectionLimit && bondSelectionLimit)
+            message = QStringLiteral("Click on an atom or bond to select it");
+        else if (bondSelectionLimit)
+            message = QStringLiteral("Click on a bond to select it");
+        else if (atomSelectionLimit)
+            message = QStringLiteral("Click on an atom to select it");
+        else
+            message = QString();
     }
 
     if (message != statusMessage)
@@ -508,9 +552,13 @@ void Mol3dViewPrivate::pickerHitUpdate(const Qt3DRender::QAbstractRayCaster::Hit
         if ((newAtom != -1) && ((currentStructure.atoms[newAtom].element != "H") || !currentStructure.isLeafAtom(newAtom)))
             newAtom = -1;
     }
-    else if (toolMode == Mol3dView::ToolModeSelectOne || toolMode == Mol3dView::ToolModeSelect)
+    else if (toolMode == Mol3dView::ToolModeSelect)
     {
-        newBond = -1;
+        if (atomSelectionLimit == 0)
+            newAtom = -1;
+
+        if (bondSelectionLimit == 0)
+            newBond = -1;
     }
 
     if (oldAtom != newAtom)
@@ -647,7 +695,6 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
             else if (Qt::Key_Escape == e->key())
             {
                 if ((d->toolMode == ToolModeBond) ||
-                    (d->toolMode == ToolModeSelectOne) ||
                     (d->toolMode == ToolModeSelect))
                 {
                     d->clearSelection();
@@ -819,16 +866,16 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
         {
             if (atom)
             {
-                if (!d->selection.empty())
+                if (!d->selectionAtoms.empty())
                 {
-                    if (atom->id == d->selection.first())
+                    if (atom->id == d->selectionAtoms.first())
                     {
                         d->clearSelection();
                     }
                     else
                     {
                         auto newStructure = d->currentStructure;
-                        int from = d->selection.first();
+                        int from = d->selectionAtoms.first();
                         int to = atom->id;
                         //TODO: We need a function to check if this will pass
                         if (newStructure.hydrogensToBond(from, to))
@@ -842,7 +889,7 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                 }
                 else if (atom && d->currentStructure.isLeafAtom(atom->id) && d->currentStructure.atoms[atom->id].element == "H")
                 {
-                    d->selectAtom(atom->id);
+                    d->setAtomSelected(atom->id, true);
                     mouseConsumed = true;
                 }
             }
@@ -879,28 +926,58 @@ bool Mol3dView::eventFilter(QObject *obj, QEvent *event)
                 mouseConsumed = true;
             }
         }
-        else if (d->toolMode == ToolModeSelectOne || d->toolMode == ToolModeSelect)
+        else if (d->toolMode == ToolModeSelect)
         {
-            if (atom)
+            if (atom && (d->atomSelectionLimit != 0))
             {
-                auto newSelection = getSelection();
+                for (int b: d->selectionBonds)
+                {
+                    d->bondEntities[b].selected = false;
+                    d->syncBondHighlight(b);
+                }
+                d->selectionBonds = {};
 
-                if (!newSelection.removeAll(atom->id))
-                    newSelection.append(atom->id);
+                if (d->atomEntities[atom->id].selected)
+                {
+                    d->setAtomSelected(atom->id, false);
+                }
+                else
+                {
+                    if (d->atomSelectionLimit > 0)
+                        while (d->selectionAtoms.size() >= d->atomSelectionLimit)
+                            d->setAtomSelected(d->selectionAtoms.last(), false);
 
-                if (d->selectionLimit > 0)
-                    while (newSelection.size() > d->selectionLimit)
-                        newSelection.pop_front();
-
-                d->clearSelection();
-                for (int id: newSelection)
-                    d->selectAtom(id);
+                    d->setAtomSelected(atom->id, true);
+                }
 
                 emit selectionChanged(getSelection());
-
                 mouseConsumed = true;
             }
+            else if (bond && (d->bondSelectionLimit != 0))
+            {
+                for (int a: d->selectionAtoms)
+                {
+                    d->atomEntities[a].selected = false;
+                    d->syncAtomHighlight(a);
+                }
+                d->selectionAtoms = {};
 
+                if (d->bondEntities[bond->id].selected)
+                {
+                    d->setBondSelected(bond->id, false);
+                }
+                else
+                {
+                    if (d->bondSelectionLimit > 0)
+                        while (d->selectionBonds.size() >= d->bondSelectionLimit)
+                            d->setBondSelected(d->selectionBonds.last(), false);
+
+                    d->setBondSelected(bond->id, true);
+                }
+
+                emit selectionChanged(getSelection());
+                mouseConsumed = true;
+            }
         }
 
         if (refreshPicker)
@@ -1183,10 +1260,8 @@ void Mol3dView::setToolMode(ToolMode m)
 {
     Q_D(Mol3dView);
     d->toolMode = m;
-    if (m == ToolModeSelectOne)
-        d->selectionLimit = 1;
-    else if (m == ToolModeSelect)
-        d->selectionLimit = 0;
+    if (m == ToolModeSelect)
+        d->atomSelectionLimit = -1;
     d->clearSelection();
 
     d->updateStatusMessage();
@@ -1198,10 +1273,13 @@ Mol3dView::ToolMode Mol3dView::getToolMode()
     return d->toolMode;
 }
 
-void Mol3dView::setSelectionLimit(int maxSelected)
+void Mol3dView::setSelectionLimit(int maxAtoms, int maxBonds)
 {
     Q_D(Mol3dView);
-    d->selectionLimit = maxSelected;
+    d->atomSelectionLimit = maxAtoms;
+    d->bondSelectionLimit = maxBonds;
+
+    d->updateStatusMessage();
 }
 
 void Mol3dView::setHighlight(Selection s)
@@ -1230,17 +1308,17 @@ void Mol3dView::setHighlight(Selection s)
     //TODO: Implement bond highlights
 }
 
-QList<int> Mol3dView::getSelection()
+Mol3dView::Selection Mol3dView::getSelection()
 {
     Q_D(Mol3dView);
-    return d->selection;
+    return Selection{d->selectionAtoms, d->selectionBonds};
 }
 
-void Mol3dView::setSelection(const QList<int> &selection)
+void Mol3dView::setSelection(const Selection &selection)
 {
     Q_D(Mol3dView);
-    for (auto const &a: selection)
-        d->selectAtom(a);
+    for (auto const &a: selection.atoms)
+        d->setAtomSelected(a, true);
 
     emit selectionChanged(getSelection());
 }
