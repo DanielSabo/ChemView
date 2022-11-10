@@ -30,8 +30,8 @@ int main(int argc, char *argv[])
     MainWindow w;
     w.show();
 
-    if (!parser.positionalArguments().isEmpty())
-        w.openFile(parser.positionalArguments().first());
+    for (const auto &filename: parser.positionalArguments())
+        w.openFile(filename);
 
     return a.exec();
 }

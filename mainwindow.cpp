@@ -1082,12 +1082,15 @@ void MainWindow::syncMenuStates()
     ui->actionRedo->setEnabled(!ts->redoStack.isEmpty());
 }
 
-void MainWindow::openFile(QString const &filename) {
+void MainWindow::openFile(QString filename) {
     Q_D(MainWindow);
 
     QString activeSurface;
     MolDocument document;
     std::shared_ptr<OptimizerNWChem> loadedOpt;
+
+    if (filename.startsWith("file://"))
+        filename = QUrl(filename).toLocalFile();
 
     try {
         if (filename.endsWith(".cvproj"))
