@@ -141,7 +141,11 @@ DISTFILES += \
     resources/shaders/gl3/bond_hightlight.frag \
     resources/shaders/gl3/bond_hightlight.vert \
     resources/shaders/gl3/selection_hightlight.frag \
-    resources/shaders/gl3/selection_hightlight.vert
+    resources/shaders/gl3/selection_hightlight.vert \
+    resources/shaders/rhi/bond_hightlight.frag \
+    resources/shaders/rhi/bond_hightlight.vert \
+    resources/shaders/rhi/selection_hightlight.frag \
+    resources/shaders/rhi/selection_hightlight.vert
 
 unix:!mac {
 DESTDIR = bin

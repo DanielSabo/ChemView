@@ -67,40 +67,45 @@ BondHighlightMaterial::BondHighlightMaterial(Qt3DCore::QNode *parent) : Qt3DRend
     shaderGL3->setVertexShaderCode(Qt3DRender::QShaderProgram::loadSource(QUrl(QStringLiteral("qrc:/shaders/gl3/bond_hightlight.vert"))));
     shaderGL3->setFragmentShaderCode(Qt3DRender::QShaderProgram::loadSource(QUrl(QStringLiteral("qrc:/shaders/gl3/bond_hightlight.frag"))));
 
-    colorParam = new Qt3DRender::QParameter(QStringLiteral("color"), QColor::fromRgbF(1.0f, 0.0f, 0.0f, 1.0f));
+    auto shaderRHI = new Qt3DRender::QShaderProgram();
+    shaderRHI->setVertexShaderCode(Qt3DRender::QShaderProgram::loadSource(QUrl(QStringLiteral("qrc:/shaders/rhi/bond_hightlight.vert"))));
+    shaderRHI->setFragmentShaderCode(Qt3DRender::QShaderProgram::loadSource(QUrl(QStringLiteral("qrc:/shaders/rhi/bond_hightlight.frag"))));
 
     auto techniqueGL3 = new Qt3DRender::QTechnique();
-    auto apiFilterGL3 = techniqueGL3->graphicsApiFilter();
-    apiFilterGL3->setApi(Qt3DRender::QGraphicsApiFilter::OpenGL);
-    apiFilterGL3->setMajorVersion(3);
-    apiFilterGL3->setMinorVersion(1);
-    apiFilterGL3->setProfile(Qt3DRender::QGraphicsApiFilter::CoreProfile);
+    techniqueGL3->graphicsApiFilter()->setApi(Qt3DRender::QGraphicsApiFilter::OpenGL);
+    techniqueGL3->graphicsApiFilter()->setMajorVersion(3);
+    techniqueGL3->graphicsApiFilter()->setMinorVersion(1);
+    techniqueGL3->graphicsApiFilter()->setProfile(Qt3DRender::QGraphicsApiFilter::CoreProfile);
 
-    auto filterKeyGL3 = new Qt3DRender::QFilterKey(this);
-    filterKeyGL3->setName(QStringLiteral("renderingStyle"));
-    filterKeyGL3->setValue(QStringLiteral("forward"));
-    techniqueGL3->addFilterKey(filterKeyGL3);
+    auto techniqueRHI = new Qt3DRender::QTechnique();
+    techniqueRHI->graphicsApiFilter()->setApi(Qt3DRender::QGraphicsApiFilter::RHI);
+    techniqueRHI->graphicsApiFilter()->setMajorVersion(1);
+    techniqueRHI->graphicsApiFilter()->setMinorVersion(0);
 
+    // Shared by both render backeneds
+    colorParam = new Qt3DRender::QParameter(QStringLiteral("color"), QColor::fromRgbF(1.0f, 0.0f, 0.0f, 1.0f));
+
+    auto filterKey = new Qt3DRender::QFilterKey(this);
+    filterKey->setName(QStringLiteral("renderingStyle"));
+    filterKey->setValue(QStringLiteral("forward"));
+
+    // Configure GL render pass
     auto renderPassGL3 = new Qt3DRender::QRenderPass();
     renderPassGL3->setShaderProgram(shaderGL3);
 
-#if 0
-    // Enable alpha blending
-    auto noDepthMask = new Qt3DRender::QNoDepthMask();
-    renderPassGL3->addRenderState(noDepthMask);
-    auto blendState = new Qt3DRender::QBlendEquationArguments();
-    blendState->setSourceRgb(Qt3DRender::QBlendEquationArguments::SourceAlpha);
-    blendState->setDestinationRgb(Qt3DRender::QBlendEquationArguments::OneMinusSourceAlpha);
-    renderPassGL3->addRenderState(blendState);
-    auto blendEquation = new Qt3DRender::QBlendEquation();
-    blendEquation->setBlendFunction(Qt3DRender::QBlendEquation::Add);
-    renderPassGL3->addRenderState(blendEquation);
-#endif
+    // Configure RHI render pass
+    auto renderPassRHI = new Qt3DRender::QRenderPass();
+    renderPassRHI->setShaderProgram(shaderRHI);
 
+    techniqueGL3->addFilterKey(filterKey);
     techniqueGL3->addRenderPass(renderPassGL3);
+
+    techniqueRHI->addFilterKey(filterKey);
+    techniqueRHI->addRenderPass(renderPassRHI);
 
     auto effect = new Qt3DRender::QEffect(this);
     effect->addTechnique(techniqueGL3);
+    effect->addTechnique(techniqueRHI);
     effect->addParameter(colorParam);
     setEffect(effect);
 }

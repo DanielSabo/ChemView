@@ -38,5 +38,9 @@
         <file>shaders/gl3/selection_hightlight.frag</file>
         <file>shaders/gl3/bond_hightlight.frag</file>
         <file>shaders/gl3/bond_hightlight.vert</file>
+        <file>shaders/rhi/selection_hightlight.vert</file>
+        <file>shaders/rhi/selection_hightlight.frag</file>
+        <file>shaders/rhi/bond_hightlight.frag</file>
+        <file>shaders/rhi/bond_hightlight.vert</file>
     </qresource>
 </RCC>
